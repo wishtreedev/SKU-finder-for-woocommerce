@@ -1,0 +1,92 @@
+// Add custom field after SKU field in product edit screen
+function add_custom_sku_checker_field() {
+    global $post;
+    
+    echo '<div class="custom-sku-checker-field">';
+    echo '<p>Enter SKU to check availability:</p>';
+    echo '<label for="custom-sku-checker">Check SKU availability:</label>';
+    echo '<input class="before-text" type="text" id="custom-sku-checker" name="custom_sku_checker" style="width: 50%;margin-left:10px;" placeholder="Enter SKU">';
+    echo '<button id="check-now-btn" style="margin-left: 10px;">Check Now</button>';
+    echo '<input type="hidden" id="product_id" name="product_id" value="' . $post->ID . '">';
+    echo '</div>';
+}
+add_action('woocommerce_product_options_sku', 'add_custom_sku_checker_field');
+
+
+
+// JavaScript for handling the SKU checker functionality
+function custom_sku_checker_js() {
+    ?>
+    <script>
+        jQuery(document).ready(function($) {
+        $('#check-now-btn').click(function(event) {
+            // Prevent default form submission behavior
+            event.preventDefault();
+            
+            var customSku = $('#custom-sku-checker').val();
+            var productId = $('#product_id').val();
+            
+            // AJAX request to check if SKU is already in use
+            $.ajax({
+                url: '<?php echo admin_url('admin-ajax.php'); ?>',
+                type: 'POST',
+                data: {
+                    action: 'check_sku_availability',
+                    sku: customSku,
+                    product_id: productId,
+                    security: '<?php echo wp_create_nonce('check_sku_nonce'); ?>'
+                },
+                success: function(response) {
+                    console.log(response); // Log response to console for debugging
+                    if (response.trim() === 'used') {
+                        alert('The SKU is already in use.');
+                    } else if (response.trim() === 'not_used') {
+                        alert('The SKU is not in use.');
+                    } else {
+                        alert('Unexpected response: ' + response);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('AJAX Error:', status, error); // Log any errors to console for debugging
+                }
+            });
+        });
+    });
+    </script>
+    <?php
+}
+add_action('admin_footer', 'custom_sku_checker_js');
+
+
+
+
+// AJAX handler to check SKU availability
+function check_sku_availability() {
+    global $wpdb;
+
+    $sku = $_POST['sku'];
+    $product_id = isset($_POST['product_id']) ? intval($_POST['product_id']) : 0;
+
+    // Query to check if SKU is already in use
+    $query = $wpdb->prepare("
+        SELECT COUNT(*)
+        FROM {$wpdb->prefix}postmeta
+        WHERE meta_key = '_sku'
+        AND meta_value = %s
+        AND post_id != %d
+    ", $sku, $product_id);
+
+    $count = $wpdb->get_var($query);
+
+    if ($count > 0) {
+        echo 'used';
+    } else {
+        echo 'not_used';
+    }
+
+    wp_die();
+}
+add_action('wp_ajax_check_sku_availability', 'check_sku_availability');
+add_action('wp_ajax_nopriv_check_sku_availability', 'check_sku_availability'); // Allow AJAX for non-logged in users
+
+
